@@ -31,12 +31,12 @@ namespace FolderToZip
             InitializeComponent();
         }
 
-        private void MainForm_Load(object sender, EventArgs e)
+        private void mainForm_Load(object sender, EventArgs e)
         {
             Log.Info("アプリケーション起動");
         }
 
-        private void MainForm_FormClosing(object sender, FormClosingEventArgs e)
+        private void mainForm_FormClosing(object sender, FormClosingEventArgs e)
         {
             Log.Info("アプリケーション終了");
         }
@@ -95,41 +95,49 @@ namespace FolderToZip
             var dirPathList = Directory.GetDirectories(param.FolderPath);
             if (dirPathList.Length == 0)
             {
-                Log.Error("フォルダ内にフォルダが見つからない");
+                Log.Warn("フォルダ内にフォルダが見つからない");
                 e.Result = "指定されたフォルダ内にフォルダが見つかりません";
                 return;
             }
 
             worker.ReportProgress(dirPathList.Length);
             var pos = 0;
+            var successCount = 0;
+            var errorCount = 0;
             foreach (var dirPath in dirPathList)
             {
+                pos++;
+                worker.ReportProgress(pos, Path.GetFileName(dirPath));
                 if (worker.CancellationPending)
                 {
-                    Log.Info($"処理キャンセル検知");
+                    Log.Info("処理キャンセル検知");
                     e.Cancel = true;
                     return;
                 }
 
-                Log.Info($"処理ファイル:{dirPath}");
-                var result = zipFolder(dirPath, param.Level);
-                pos++;
-
-                worker.ReportProgress(pos, result + $"[{Path.GetFileName(dirPath)}]");
-                Log.Info($"結果:{result}");
+                Log.Info($"処理フォルダ={dirPath}");
+                if (zipFolder(dirPath, param.Level))
+                {
+                    successCount++;
+                }
+                else
+                {
+                    errorCount++;
+                }
             }
 
             Log.Info("処理完了");
-            e.Result = "処理が完了しました";
+            e.Result = $"処理結果 成功={successCount} 失敗={errorCount}";
             return;
         }
 
-        private string zipFolder(string dirPath, CompressionLevel level)
+        private static bool zipFolder(string dirPath, CompressionLevel level)
         {
             string outputPath = dirPath + ".zip";
             if (File.Exists(outputPath))
             {
-                return $"NG 展開先に既にファイルが存在しています";
+                Log.Warn($"ファイルが既に存在しています file={outputPath}");
+                return false;
             }
 
             try
@@ -138,10 +146,11 @@ namespace FolderToZip
             }
             catch (Exception e)
             {
-                return $"NG 例外発生 {e.Message}";
+                Log.Error(e, $"例外発生={e.Message}");
+                return false;
             }
 
-            return $"OK";
+            return true;
         }
 
         private void bgWorker_ProgressChanged(object sender, ProgressChangedEventArgs e)
